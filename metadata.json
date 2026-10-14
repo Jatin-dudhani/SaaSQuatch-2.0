@@ -1,0 +1,6 @@
+{
+  "name": "SaaSQuatch 2.0 - Lead Intelligence & Caprae Pre-Work Dossier",
+  "description": "AI-enhanced B2B lead generation, scraping intelligence, and deal sourcing platform built for Caprae Capital Partners, with complete interview submission handbook answers and architecture teardown.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
