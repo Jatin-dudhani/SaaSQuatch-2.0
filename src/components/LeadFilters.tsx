@@ -1,6 +1,6 @@
 import React from 'react';
 import { FilterOptions } from '../types';
-import { Search, Filter, Download, RotateCcw, CheckSquare, Square } from 'lucide-react';
+import { Search, Filter, Download, RotateCcw, CheckSquare, Square, Upload } from 'lucide-react';
 
 interface LeadFiltersProps {
   filters: FilterOptions;
@@ -8,8 +8,11 @@ interface LeadFiltersProps {
   industries: string[];
   totalFiltered: number;
   totalCount: number;
-  onExportCsv: () => void;
-  onExportJson: () => void;
+  selectedCount?: number;
+  onClearSelection?: () => void;
+  onExportCsv: (scope?: 'selected' | 'all') => void;
+  onExportJson: (scope?: 'selected' | 'all') => void;
+  onOpenBulkImport?: () => void;
 }
 
 export const LeadFilters: React.FC<LeadFiltersProps> = ({
@@ -18,8 +21,11 @@ export const LeadFilters: React.FC<LeadFiltersProps> = ({
   industries,
   totalFiltered,
   totalCount,
+  selectedCount = 0,
+  onClearSelection,
   onExportCsv,
   onExportJson,
+  onOpenBulkImport,
 }) => {
   const handleReset = () => {
     setFilters({
@@ -91,24 +97,70 @@ export const LeadFilters: React.FC<LeadFiltersProps> = ({
           </select>
         </div>
 
-        {/* Export Buttons */}
+        {/* Export and Import Buttons */}
         <div className="flex items-center gap-2 shrink-0">
-          <button
-            onClick={onExportCsv}
-            title="Export filtered leads to CSV"
-            className="px-3 py-2 text-xs font-medium text-slate-200 bg-slate-800 hover:bg-slate-700 rounded-md transition-colors flex items-center gap-1.5 whitespace-nowrap cursor-pointer"
-          >
-            <Download className="w-3.5 h-3.5 text-slate-400" />
-            <span>CSV</span>
-          </button>
-          <button
-            onClick={onExportJson}
-            title="Export filtered leads to JSON"
-            className="px-3 py-2 text-xs font-medium text-slate-200 bg-slate-800 hover:bg-slate-700 rounded-md transition-colors flex items-center gap-1.5 whitespace-nowrap cursor-pointer"
-          >
-            <Download className="w-3.5 h-3.5 text-slate-400" />
-            <span>JSON</span>
-          </button>
+          {onOpenBulkImport && (
+            <button
+              onClick={onOpenBulkImport}
+              title="Bulk import leads from JSON file"
+              className="px-3 py-2 text-xs font-semibold text-blue-300 bg-blue-950/60 hover:bg-blue-900/80 border border-blue-800/80 rounded-md transition-colors flex items-center gap-1.5 whitespace-nowrap cursor-pointer shadow-xs"
+            >
+              <Upload className="w-3.5 h-3.5 text-blue-400" />
+              <span>Import JSON</span>
+            </button>
+          )}
+
+          {selectedCount > 0 ? (
+            <div className="flex items-center gap-1.5 bg-blue-950/40 border border-blue-800/70 rounded-md p-1">
+              <span className="text-[11px] font-semibold text-blue-300 px-2 flex items-center gap-1.5">
+                <span>{selectedCount} selected</span>
+                {onClearSelection && (
+                  <button
+                    onClick={onClearSelection}
+                    className="text-blue-400 hover:text-white font-bold cursor-pointer"
+                    title="Clear selection"
+                  >
+                    ×
+                  </button>
+                )}
+              </span>
+              <button
+                onClick={() => onExportCsv('selected')}
+                title={`Export ${selectedCount} selected leads to CSV`}
+                className="px-2.5 py-1.5 text-xs font-semibold text-white bg-blue-600 hover:bg-blue-500 rounded transition-colors flex items-center gap-1 whitespace-nowrap cursor-pointer shadow-xs"
+              >
+                <Download className="w-3.5 h-3.5" />
+                <span>Export CSV ({selectedCount})</span>
+              </button>
+              <button
+                onClick={() => onExportJson('selected')}
+                title={`Export ${selectedCount} selected leads to JSON`}
+                className="px-2.5 py-1.5 text-xs font-medium text-slate-200 bg-slate-800 hover:bg-slate-700 rounded transition-colors flex items-center gap-1 whitespace-nowrap cursor-pointer"
+              >
+                <Download className="w-3.5 h-3.5 text-slate-400" />
+                <span>Export JSON ({selectedCount})</span>
+              </button>
+            </div>
+          ) : (
+            <>
+              <button
+                onClick={() => onExportCsv('all')}
+                title="Export all filtered leads to CSV"
+                className="px-3 py-2 text-xs font-medium text-slate-200 bg-slate-800 hover:bg-slate-700 rounded-md transition-colors flex items-center gap-1.5 whitespace-nowrap cursor-pointer"
+              >
+                <Download className="w-3.5 h-3.5 text-slate-400" />
+                <span>CSV</span>
+              </button>
+              <button
+                onClick={() => onExportJson('all')}
+                title="Export all filtered leads to JSON"
+                className="px-3 py-2 text-xs font-medium text-slate-200 bg-slate-800 hover:bg-slate-700 rounded-md transition-colors flex items-center gap-1.5 whitespace-nowrap cursor-pointer"
+              >
+                <Download className="w-3.5 h-3.5 text-slate-400" />
+                <span>JSON</span>
+              </button>
+            </>
+          )}
         </div>
       </div>
 

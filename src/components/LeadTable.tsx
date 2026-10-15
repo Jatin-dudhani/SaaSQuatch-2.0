@@ -13,26 +13,53 @@ import {
   TrendingUp,
   Cloud,
   CheckCircle2,
+  Download,
 } from 'lucide-react';
 
 interface LeadTableProps {
   leads: Lead[];
+  selectedLeadIds: Set<string>;
+  onToggleSelectLead: (leadId: string) => void;
+  onToggleSelectAll: () => void;
   onSelectLead: (lead: Lead) => void;
   onEnrichLead: (lead: Lead, e: React.MouseEvent) => void;
   onVerifyLead: (lead: Lead, e: React.MouseEvent) => void;
   onUpdateStage: (leadId: string, stage: LeadStage) => void;
   onResetFilters: () => void;
+  onExportSelectionCsv?: () => void;
+  onExportSelectionJson?: () => void;
+  onClearSelection?: () => void;
 }
 
 export const LeadTable: React.FC<LeadTableProps> = ({
   leads,
+  selectedLeadIds,
+  onToggleSelectLead,
+  onToggleSelectAll,
   onSelectLead,
   onEnrichLead,
   onVerifyLead,
   onUpdateStage,
   onResetFilters,
+  onExportSelectionCsv,
+  onExportSelectionJson,
+  onClearSelection,
 }) => {
   const [copiedEmail, setCopiedEmail] = React.useState<string | null>(null);
+  const selectAllRef = React.useRef<HTMLInputElement | null>(null);
+
+  const selectedCountInView = React.useMemo(() => {
+    return leads.filter((lead) => selectedLeadIds.has(lead.id)).length;
+  }, [leads, selectedLeadIds]);
+
+  const allSelected = leads.length > 0 && selectedCountInView === leads.length;
+  const isIndeterminate = selectedCountInView > 0 && selectedCountInView < leads.length;
+
+  React.useEffect(() => {
+    if (selectAllRef.current) {
+      selectAllRef.current.indeterminate = isIndeterminate;
+    }
+  }, [isIndeterminate]);
 
   const handleCopyEmail = (email: string, e: React.MouseEvent) => {
     e.stopPropagation();
@@ -60,11 +87,81 @@ export const LeadTable: React.FC<LeadTableProps> = ({
   }
 
   return (
-    <div className="bg-[#111622] border border-slate-800 rounded-lg overflow-hidden shadow-sm">
+    <div className="bg-[#111622] border border-slate-800 rounded-lg overflow-hidden shadow-sm flex flex-col">
+      {/* Selection Action Toolbar Banner */}
+      {selectedCountInView > 0 && (
+        <div className="bg-gradient-to-r from-blue-950/80 via-slate-900 to-blue-950/80 border-b border-blue-800/60 px-4 py-2.5 flex flex-wrap items-center justify-between gap-3 text-xs">
+          <div className="flex items-center gap-3">
+            <span className="inline-flex items-center gap-2 font-semibold text-blue-200">
+              <span className="w-5 h-5 rounded-full bg-blue-600 text-white flex items-center justify-center text-[10px] font-bold">
+                {selectedCountInView}
+              </span>
+              <span>
+                {selectedCountInView} of {leads.length} {leads.length === 1 ? 'lead' : 'leads'} selected
+              </span>
+            </span>
+            <div className="h-3.5 w-px bg-slate-700 hidden sm:block" />
+            <div className="flex items-center gap-2">
+              {!allSelected && (
+                <button
+                  onClick={onToggleSelectAll}
+                  className="text-blue-400 hover:text-blue-300 font-medium cursor-pointer underline text-[11px]"
+                >
+                  Select all ({leads.length})
+                </button>
+              )}
+              {onClearSelection && (
+                <button
+                  onClick={onClearSelection}
+                  className="text-slate-400 hover:text-slate-200 cursor-pointer underline text-[11px]"
+                >
+                  Deselect all
+                </button>
+              )}
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2">
+            <span className="text-slate-400 font-medium text-[11px]">Export Selection:</span>
+            {onExportSelectionCsv && (
+              <button
+                onClick={onExportSelectionCsv}
+                title={`Export ${selectedCountInView} selected leads as CSV`}
+                className="px-3 py-1.5 text-xs font-semibold text-white bg-blue-600 hover:bg-blue-500 rounded-md transition-colors flex items-center gap-1.5 cursor-pointer shadow-xs active:scale-95"
+              >
+                <Download className="w-3.5 h-3.5" />
+                <span>Export CSV ({selectedCountInView})</span>
+              </button>
+            )}
+            {onExportSelectionJson && (
+              <button
+                onClick={onExportSelectionJson}
+                title={`Export ${selectedCountInView} selected leads as JSON`}
+                className="px-3 py-1.5 text-xs font-semibold text-slate-200 bg-slate-800 hover:bg-slate-700 border border-slate-700/80 rounded-md transition-colors flex items-center gap-1.5 cursor-pointer active:scale-95"
+              >
+                <Download className="w-3.5 h-3.5 text-slate-400" />
+                <span>Export JSON ({selectedCountInView})</span>
+              </button>
+            )}
+          </div>
+        </div>
+      )}
+
       <div className="overflow-x-auto">
         <table className="w-full text-left text-xs border-collapse">
           <thead>
             <tr className="bg-[#0B0F17]/80 border-b border-slate-800 text-slate-400 font-medium select-none">
+              <th className="py-3 px-3 w-10 text-center">
+                <input
+                  ref={selectAllRef}
+                  type="checkbox"
+                  checked={allSelected}
+                  onChange={onToggleSelectAll}
+                  className="w-4 h-4 rounded border-slate-700 bg-[#0B0F17] text-blue-600 focus:ring-blue-500 focus:ring-offset-0 focus:ring-1 cursor-pointer accent-blue-600"
+                  title={allSelected ? 'Deselect all visible leads' : 'Select all visible leads'}
+                  aria-label="Select all visible leads"
+                />
+              </th>
               <th className="py-3 px-4">Company & Target Domain</th>
               <th className="py-3 px-4">Industry / Location</th>
               <th className="py-3 px-4 text-right">ARR / EBITDA</th>
@@ -80,13 +177,30 @@ export const LeadTable: React.FC<LeadTableProps> = ({
               const isEnriched = !!lead.aiEnrichment;
               const peScore = lead.peSignals.acquirabilityScore;
               const isHighFit = peScore >= 90;
+              const isSelected = selectedLeadIds.has(lead.id);
 
               return (
                 <tr
                   key={lead.id}
                   onClick={() => onSelectLead(lead)}
-                  className="hover:bg-slate-800/40 transition-colors cursor-pointer group"
+                  className={`transition-colors cursor-pointer group ${
+                    isSelected
+                      ? 'bg-blue-950/30 hover:bg-blue-900/40 border-l-2 border-l-blue-500'
+                      : 'hover:bg-slate-800/40 border-l-2 border-l-transparent'
+                  }`}
                 >
+                  {/* Selection Checkbox */}
+                  <td className="py-3.5 px-3 text-center" onClick={(e) => e.stopPropagation()}>
+                    <input
+                      type="checkbox"
+                      checked={isSelected}
+                      onChange={() => onToggleSelectLead(lead.id)}
+                      className="w-4 h-4 rounded border-slate-700 bg-[#0B0F17] text-blue-600 focus:ring-blue-500 focus:ring-offset-0 focus:ring-1 cursor-pointer accent-blue-600"
+                      title={isSelected ? `Deselect ${lead.companyName}` : `Select ${lead.companyName}`}
+                      aria-label={`Select ${lead.companyName}`}
+                    />
+                  </td>
+
                   {/* Company & Domain */}
                   <td className="py-3.5 px-4">
                     <div className="font-semibold text-slate-100 group-hover:text-blue-400 transition-colors flex items-center gap-1.5">

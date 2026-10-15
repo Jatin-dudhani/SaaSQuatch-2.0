@@ -1,10 +1,11 @@
 import React from 'react';
-import { Sparkles, Terminal, MailCheck, FileText, Database, ShieldCheck } from 'lucide-react';
+import { Sparkles, Terminal, MailCheck, FileText, Database, ShieldCheck, Upload } from 'lucide-react';
 
 interface HeaderProps {
   activeTab: 'leads' | 'verifier' | 'dossier';
   setActiveTab: (tab: 'leads' | 'verifier' | 'dossier') => void;
   onOpenScraper: () => void;
+  onOpenBulkImport: () => void;
   leadsCount: number;
 }
 
@@ -12,6 +13,7 @@ export const Header: React.FC<HeaderProps> = ({
   activeTab,
   setActiveTab,
   onOpenScraper,
+  onOpenBulkImport,
   leadsCount,
 }) => {
   return (
@@ -70,8 +72,17 @@ export const Header: React.FC<HeaderProps> = ({
             </button>
           </nav>
 
-          {/* Zone 3: 1 primary action */}
-          <div className="flex items-center gap-3 shrink-0">
+          {/* Zone 3: Actions */}
+          <div className="flex items-center gap-2.5 shrink-0">
+            <button
+              onClick={onOpenBulkImport}
+              className="px-3 py-2 text-xs font-semibold text-slate-200 bg-slate-850 hover:bg-slate-800 active:bg-slate-900 border border-slate-700/80 rounded-lg shadow-xs hover:shadow transition-all flex items-center gap-1.5 whitespace-nowrap shrink-0 cursor-pointer"
+              title="Bulk import leads from JSON file with schema validation"
+            >
+              <Upload className="w-3.5 h-3.5 text-blue-400" />
+              <span>Bulk Import</span>
+            </button>
+
             <button
               onClick={onOpenScraper}
               className="px-3.5 py-2 text-xs font-semibold text-white bg-blue-600 hover:bg-blue-500 active:bg-blue-700 rounded-lg shadow-sm hover:shadow transition-all flex items-center gap-2 whitespace-nowrap shrink-0 cursor-pointer"

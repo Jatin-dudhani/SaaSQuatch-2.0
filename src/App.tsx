@@ -9,6 +9,8 @@ import { LeadDrawer } from './components/LeadDrawer';
 import { ScraperConsoleModal } from './components/ScraperConsoleModal';
 import { EmailVerifierModal } from './components/EmailVerifierModal';
 import { CapraeDossierView } from './components/CapraeDossierView';
+import { BulkImportModal } from './components/BulkImportModal';
+import { CheckCircle2, X } from 'lucide-react';
 
 export default function App() {
   const [leads, setLeads] = useState<Lead[]>(INITIAL_LEADS);
@@ -17,6 +19,9 @@ export default function App() {
   const [isEnriching, setIsEnriching] = useState<boolean>(false);
   const [isScraperOpen, setIsScraperOpen] = useState<boolean>(false);
   const [isVerifierModalOpen, setIsVerifierModalOpen] = useState<boolean>(false);
+  const [isBulkImportOpen, setIsBulkImportOpen] = useState<boolean>(false);
+  const [importNotice, setImportNotice] = useState<{ count: number; timestamp: string } | null>(null);
+  const [selectedLeadIds, setSelectedLeadIds] = useState<Set<string>>(new Set());
 
   const [filters, setFilters] = useState<FilterOptions>({
     searchQuery: '',
@@ -94,6 +99,11 @@ export default function App() {
       return true;
     });
   }, [leads, filters]);
+
+  // Selected count among currently filtered leads
+  const selectedFilteredCount = useMemo(() => {
+    return filteredLeads.filter((l) => selectedLeadIds.has(l.id)).length;
+  }, [filteredLeads, selectedLeadIds]);
 
   // Enrich lead via server-side Gemini 3.8 Flash
   const handleEnrichLead = async (lead: Lead, e?: React.MouseEvent) => {
@@ -211,8 +221,60 @@ export default function App() {
     setSelectedLead(newLead);
   };
 
-  // CSV Export
-  const handleExportCsv = () => {
+  // Bulk Import handler
+  const handleBulkImport = (importedLeads: Lead[]) => {
+    if (importedLeads.length === 0) return;
+    setLeads((prev) => [...importedLeads, ...prev]);
+    if (!selectedLead && importedLeads.length > 0) {
+      setSelectedLead(importedLeads[0]);
+    }
+    setImportNotice({
+      count: importedLeads.length,
+      timestamp: new Date().toLocaleTimeString(),
+    });
+  };
+
+  // Selection handlers
+  const handleToggleSelectLead = (leadId: string) => {
+    setSelectedLeadIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(leadId)) {
+        next.delete(leadId);
+      } else {
+        next.add(leadId);
+      }
+      return next;
+    });
+  };
+
+  const handleToggleSelectAll = () => {
+    const visibleIds = filteredLeads.map((l) => l.id);
+    const allSelected = visibleIds.length > 0 && visibleIds.every((id) => selectedLeadIds.has(id));
+
+    setSelectedLeadIds((prev) => {
+      const next = new Set(prev);
+      if (allSelected) {
+        visibleIds.forEach((id) => next.delete(id));
+      } else {
+        visibleIds.forEach((id) => next.add(id));
+      }
+      return next;
+    });
+  };
+
+  const handleClearSelection = () => {
+    setSelectedLeadIds(new Set());
+  };
+
+  // CSV Export (Selective or All)
+  const handleExportCsv = (scope: 'selected' | 'all' = selectedLeadIds.size > 0 ? 'selected' : 'all') => {
+    const leadsToExport =
+      scope === 'selected' && selectedLeadIds.size > 0
+        ? filteredLeads.filter((l) => selectedLeadIds.has(l.id))
+        : filteredLeads;
+
+    if (leadsToExport.length === 0) return;
+
     const headers = [
       'Company Name',
       'Domain',
@@ -229,7 +291,7 @@ export default function App() {
       'Stage',
     ];
 
-    const rows = filteredLeads.map((l) => [
+    const rows = leadsToExport.map((l) => [
       `"${l.companyName}"`,
       `"${l.domain}"`,
       `"${l.industry}"`,
@@ -250,20 +312,29 @@ export default function App() {
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.href = url;
-    link.setAttribute('download', `saasquatch_leads_export_${new Date().toISOString().split('T')[0]}.csv`);
+    const prefix = scope === 'selected' ? `selected_${leadsToExport.length}` : `export_${leadsToExport.length}`;
+    link.setAttribute('download', `saasquatch_leads_${prefix}_${new Date().toISOString().split('T')[0]}.csv`);
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
   };
 
-  // JSON Export
-  const handleExportJson = () => {
-    const jsonStr = JSON.stringify(filteredLeads, null, 2);
+  // JSON Export (Selective or All)
+  const handleExportJson = (scope: 'selected' | 'all' = selectedLeadIds.size > 0 ? 'selected' : 'all') => {
+    const leadsToExport =
+      scope === 'selected' && selectedLeadIds.size > 0
+        ? filteredLeads.filter((l) => selectedLeadIds.has(l.id))
+        : filteredLeads;
+
+    if (leadsToExport.length === 0) return;
+
+    const jsonStr = JSON.stringify(leadsToExport, null, 2);
     const blob = new Blob([jsonStr], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.href = url;
-    link.setAttribute('download', `saasquatch_leads_export_${new Date().toISOString().split('T')[0]}.json`);
+    const prefix = scope === 'selected' ? `selected_${leadsToExport.length}` : `export_${leadsToExport.length}`;
+    link.setAttribute('download', `saasquatch_leads_${prefix}_${new Date().toISOString().split('T')[0]}.json`);
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
@@ -276,11 +347,45 @@ export default function App() {
         activeTab={activeTab}
         setActiveTab={setActiveTab}
         onOpenScraper={() => setIsScraperOpen(true)}
+        onOpenBulkImport={() => setIsBulkImportOpen(true)}
         leadsCount={leads.length}
       />
 
       {/* Main Workspace */}
       <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-6">
+        {/* Bulk Import Success Notice Banner */}
+        {importNotice && (
+          <div className="bg-emerald-950/70 border border-emerald-600/60 rounded-xl p-4 flex items-center justify-between text-xs text-emerald-200 shadow-lg animate-checkmark-pop">
+            <div className="flex items-center gap-3">
+              <div className="w-8 h-8 rounded-full bg-emerald-500/20 border border-emerald-400/40 flex items-center justify-center text-emerald-300 shrink-0">
+                <CheckCircle2 className="w-4 h-4" />
+              </div>
+              <div>
+                <strong className="text-white text-sm block">
+                  Bulk Import Successful
+                </strong>
+                <span>
+                  Successfully imported <span className="font-mono font-bold text-white">{importNotice.count}</span> target leads into your pipeline at {importNotice.timestamp}.
+                </span>
+              </div>
+            </div>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => setIsBulkImportOpen(true)}
+                className="px-2.5 py-1 text-[11px] font-medium bg-emerald-900/60 hover:bg-emerald-800 border border-emerald-700 rounded text-emerald-200 cursor-pointer transition-colors"
+              >
+                Import More
+              </button>
+              <button
+                onClick={() => setImportNotice(null)}
+                className="p-1 text-emerald-400 hover:text-white rounded hover:bg-emerald-900/50 cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+          </div>
+        )}
+
         {/* Tab 1: Lead Intelligence Hub */}
         {activeTab === 'leads' && (
           <div className="space-y-6">
@@ -294,13 +399,22 @@ export default function App() {
               industries={industries}
               totalFiltered={filteredLeads.length}
               totalCount={leads.length}
+              selectedCount={selectedFilteredCount}
+              onClearSelection={handleClearSelection}
               onExportCsv={handleExportCsv}
               onExportJson={handleExportJson}
+              onOpenBulkImport={() => setIsBulkImportOpen(true)}
             />
 
             {/* Leads Table */}
             <LeadTable
               leads={filteredLeads}
+              selectedLeadIds={selectedLeadIds}
+              onToggleSelectLead={handleToggleSelectLead}
+              onToggleSelectAll={handleToggleSelectAll}
+              onClearSelection={handleClearSelection}
+              onExportSelectionCsv={() => handleExportCsv('selected')}
+              onExportSelectionJson={() => handleExportJson('selected')}
               onSelectLead={(lead) => setSelectedLead(lead)}
               onEnrichLead={(lead, e) => {
                 setSelectedLead(lead);
@@ -368,6 +482,14 @@ export default function App() {
         isOpen={isScraperOpen}
         onClose={() => setIsScraperOpen(false)}
         onLeadScraped={handleLeadScraped}
+      />
+
+      {/* Bulk Lead Import Modal */}
+      <BulkImportModal
+        isOpen={isBulkImportOpen}
+        onClose={() => setIsBulkImportOpen(false)}
+        existingLeads={leads}
+        onImportLeads={handleBulkImport}
       />
     </div>
   );
