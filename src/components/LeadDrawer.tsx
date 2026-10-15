@@ -22,9 +22,12 @@ import {
   CheckCircle2,
   Settings,
   Loader2,
+  Flame,
 } from 'lucide-react';
 import { SalesforceMappingSettings, DEFAULT_SALESFORCE_MAPPINGS } from './SalesforceMappingSettings';
 import { SalesforceFieldMapping } from '../types';
+import { ArrSparkline } from './ArrSparkline';
+import { getLeadArrHistory, getYoYGrowth } from '../utils/revenueUtils';
 
 interface LeadDrawerProps {
   lead: Lead | null;
@@ -49,6 +52,7 @@ export const LeadDrawer: React.FC<LeadDrawerProps> = ({
   const [activeSequenceTab, setActiveSequenceTab] = useState<'pe' | 'b2b' | 'linkedin' | 'call'>('pe');
   const [customAngle, setCustomAngle] = useState('');
   const [customPitchResult, setCustomPitchResult] = useState<string | null>(null);
+  const [customPitchMeta, setCustomPitchMeta] = useState<{ isFallback?: boolean; source?: string; notice?: string } | null>(null);
   const [isGeneratingCustom, setIsGeneratingCustom] = useState(false);
   const [isSyncingSalesforce, setIsSyncingSalesforce] = useState(false);
   const [justSynced, setJustSynced] = useState(false);
@@ -80,6 +84,11 @@ export const LeadDrawer: React.FC<LeadDrawerProps> = ({
       const data = await res.json();
       if (data.pitch) {
         setCustomPitchResult(data.pitch);
+        setCustomPitchMeta({
+          isFallback: data.isFallback,
+          source: data.source,
+          notice: data.notice,
+        });
       }
     } catch (err) {
       console.error(err);
@@ -153,8 +162,17 @@ export const LeadDrawer: React.FC<LeadDrawerProps> = ({
         {/* Header */}
         <div className="sticky top-0 z-10 bg-[#0F141F]/95 backdrop-blur-md border-b border-slate-800 p-5 flex items-center justify-between">
           <div>
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 flex-wrap">
               <h2 className="text-lg font-bold text-white tracking-tight">{lead.companyName}</h2>
+              {(lead.isHot || (lead.peSignals?.acquirabilityScore ?? 0) > 85) && (
+                <span
+                  className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold tracking-wide uppercase bg-gradient-to-r from-rose-500/25 via-amber-500/20 to-red-500/25 text-rose-300 border border-rose-500/60 shadow-[0_0_12px_rgba(244,63,94,0.35)] shrink-0 animate-pulse"
+                  title="🔥 Hot Target: Acquirability score exceeds 85 threshold (auto-flagged by background engine)"
+                >
+                  <Flame className="w-3 h-3 text-rose-400 fill-rose-500/50 shrink-0" />
+                  <span>HOT TARGET</span>
+                </span>
+              )}
               <a
                 href={`https://${lead.domain}`}
                 target="_blank"
@@ -241,10 +259,25 @@ export const LeadDrawer: React.FC<LeadDrawerProps> = ({
         <div className="p-6 space-y-6 flex-1 text-xs">
           {/* Top Deal Summary Cards */}
           <div className="grid grid-cols-3 gap-3">
-            <div className="bg-[#141B29] border border-slate-800 rounded-lg p-3">
-              <div className="text-slate-500 text-[11px]">Financial Profile</div>
-              <div className="text-sm font-bold font-mono text-white mt-1 tabular-nums">{lead.estimatedRevenue}</div>
-              <div className="text-[11px] font-mono text-emerald-400 mt-0.5 tabular-nums">EBITDA: {lead.estimatedEbitda}</div>
+            <div className="bg-[#141B29] border border-slate-800 rounded-lg p-3 flex flex-col justify-between">
+              <div>
+                <div className="flex items-center justify-between text-slate-500 text-[11px]">
+                  <span>Financial Profile</span>
+                  <span className="text-[10px] font-mono text-emerald-400 font-semibold flex items-center gap-0.5">
+                    <TrendingUp className="w-2.5 h-2.5" />
+                    +{getYoYGrowth(lead, getLeadArrHistory(lead))}% YoY
+                  </span>
+                </div>
+                <div className="text-sm font-bold font-mono text-white mt-1 tabular-nums">{lead.estimatedRevenue}</div>
+                <div className="text-[11px] font-mono text-emerald-400 mt-0.5 tabular-nums">EBITDA: {lead.estimatedEbitda}</div>
+              </div>
+              <div className="mt-2 pt-2 border-t border-slate-800/80">
+                <div className="text-[10px] text-slate-500 mb-1 flex items-center justify-between">
+                  <span>ARR Trajectory</span>
+                  <span className="font-mono text-[9px] text-slate-400">Recharts Sparkline</span>
+                </div>
+                <ArrSparkline data={getLeadArrHistory(lead)} width={175} height={30} />
+              </div>
             </div>
 
             <div className="bg-[#141B29] border border-slate-800 rounded-lg p-3">
@@ -524,7 +557,11 @@ export const LeadDrawer: React.FC<LeadDrawerProps> = ({
                 </div>
                 <div>
                   <h3 className="font-semibold text-slate-100">Caprae Deep AI Deal Teardown</h3>
-                  <p className="text-[11px] text-slate-400">Powered by server-side Google Gemini 3.8 Flash</p>
+                  <p className="text-[11px] text-slate-400">
+                    {enrichment?.source === 'synthetic-engine'
+                      ? 'Powered by Contextual Intelligence Engine (Quota fallback)'
+                      : 'Powered by server-side Google Gemini 3.8 Flash'}
+                  </p>
                 </div>
               </div>
 
@@ -698,20 +735,45 @@ export const LeadDrawer: React.FC<LeadDrawerProps> = ({
                   </div>
 
                   {customPitchResult && (
-                    <div className="relative bg-[#0B0F17] border border-blue-900/40 rounded p-3 mt-2">
-                      <p className="text-slate-200 text-xs whitespace-pre-wrap pr-6">
+                    <div className="relative bg-[#0B0F17] border border-blue-900/40 rounded-lg p-3.5 mt-2 space-y-2">
+                      <div className="flex items-center justify-between">
+                        {customPitchMeta?.isFallback ? (
+                          <div
+                            className="flex items-center gap-1.5 text-[10px] font-medium text-amber-300 bg-amber-950/60 border border-amber-800/60 px-2 py-0.5 rounded"
+                            title="Gemini API prepayment quota reached; generated via tailored contextual intelligence engine."
+                          >
+                            <Sparkles className="w-3 h-3 text-amber-400" />
+                            <span>Contextual AI Engine (Quota Fallback)</span>
+                          </div>
+                        ) : (
+                          <div className="flex items-center gap-1.5 text-[10px] font-medium text-blue-300 bg-blue-950/60 border border-blue-800/60 px-2 py-0.5 rounded">
+                            <Sparkles className="w-3 h-3 text-blue-400" />
+                            <span>Gemini 3.8 Flash</span>
+                          </div>
+                        )}
+
+                        <button
+                          onClick={() => handleCopy(customPitchResult, 'customPitch')}
+                          className="p-1.5 text-slate-400 hover:text-white bg-slate-800/90 hover:bg-slate-700 rounded transition-colors cursor-pointer flex items-center gap-1 text-[11px]"
+                          title="Copy personalized pitch to clipboard"
+                        >
+                          {copiedKey === 'customPitch' ? (
+                            <>
+                              <Check className="w-3.5 h-3.5 text-emerald-400" />
+                              <span className="text-emerald-400 font-medium">Copied!</span>
+                            </>
+                          ) : (
+                            <>
+                              <Copy className="w-3.5 h-3.5" />
+                              <span>Copy Pitch</span>
+                            </>
+                          )}
+                        </button>
+                      </div>
+
+                      <p className="text-slate-200 text-xs whitespace-pre-wrap leading-relaxed font-sans pt-1">
                         {customPitchResult}
                       </p>
-                      <button
-                        onClick={() => handleCopy(customPitchResult, 'customPitch')}
-                        className="absolute top-2.5 right-2.5 p-1 text-slate-400 hover:text-white bg-slate-800 rounded transition-colors cursor-pointer"
-                      >
-                        {copiedKey === 'customPitch' ? (
-                          <Check className="w-3 h-3 text-emerald-400" />
-                        ) : (
-                          <Copy className="w-3 h-3" />
-                        )}
-                      </button>
                     </div>
                   )}
                 </div>

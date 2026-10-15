@@ -33,6 +33,7 @@ export interface AiEnrichmentResult {
     coldCallScript: string;
   };
   enrichedAt: string;
+  source?: 'gemini-3.8-flash' | 'synthetic-engine';
 }
 
 export interface DeliverabilityInfo {
@@ -44,6 +45,12 @@ export interface DeliverabilityInfo {
   smtpCheckValid: boolean;
   syntaxValid: boolean;
   lastChecked: string;
+}
+
+export interface ArrHistoryPoint {
+  period: string;
+  arr: number;
+  formattedArr?: string;
 }
 
 export interface Lead {
@@ -61,6 +68,8 @@ export interface Lead {
   foundedYear: number;
   estimatedRevenue: string; // e.g. "$4.5M ARR"
   estimatedEbitda: string;  // e.g. "$1.4M (31%)"
+  arrHistory?: ArrHistoryPoint[];
+  yoyGrowth?: number; // e.g. 18 for +18%
   decisionMaker: DecisionMaker;
   deliverability: DeliverabilityInfo;
   peSignals: PESignals;
@@ -68,6 +77,8 @@ export interface Lead {
   stage: LeadStage;
   scrapedAt: string;
   tags: string[];
+  isHot?: boolean;
+  hotMarkedAt?: string;
   salesforceSync?: {
     synced: boolean;
     syncedAt: string;
@@ -84,6 +95,7 @@ export interface FilterOptions {
   onlyBootstrapped: boolean;
   onlySuccessionRisk: boolean;
   onlyLegacyTech: boolean;
+  onlyHot?: boolean;
 }
 
 export interface ScrapeSimulationLog {

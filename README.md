@@ -20,10 +20,30 @@ The application combines a high-performance interactive pipeline UI with server-
   - Individual row selection checkboxes with click isolation (`stopPropagation`) to select leads without triggering detail drawers.
   - Master checkbox supporting checked, unchecked, and **indeterminate** states.
   - Floating batch selection bar displaying live selection count, "Deselect All", and targeted export actions.
+- **Selection Summary Sidebar**:
+  - Live aggregate **ARR calculation** across all currently selected pipeline leads.
+  - **Total employee headcount** summation and average workforce sizing.
+  - PE operational efficiency metrics, including **ARR per Employee** and average **PE Acquirability Score** (0–100).
+  - Selected leads roster with inline company badge, ARR/headcount pills, and individual item deselect controls.
+  - Direct batch CSV and JSON export buttons and toggleable sidebar visibility.
+- **Historical ARR Sparkline Visualization (Recharts)**:
+  - Mini area chart sparkline embedded in every row's **Estimated ARR & Growth** column built with **Recharts**.
+  - Displays multi-quarter historical revenue trajectory with glowing gradient fills and responsive min/max domains.
+  - Interactive hover tooltips displaying the exact quarter and ARR values (e.g. `2025 Q3: $4.4M ARR`).
+  - Annualized YoY growth rate indicator (`+22% YoY` with `TrendingUp` icon).
+  - Also embedded directly into the **Financial Profile** card inside the Lead Dossier Drawer.
+- **Autonomous Background Lead Scoring & 'Hot' Badges**:
+  - **Background Evaluation Daemon**: Continuous background process (`useHotLeadDaemon`) that automatically monitors all pipeline leads and marks candidates as **'Hot'** if their `acquirabilityScore` strictly exceeds **85**.
+  - **Visually Distinct 'Hot' Badge in LeadTable**:
+    - Highlighted flame badge (`🔥 HOT`) with gradient glowing animation beside the company name on qualifying rows.
+    - Prominent **Hot Fit** indicator and highlighted rose score badge in the PE Acquirability column.
+    - Subtle warm border accent on Hot table rows for instantaneous identification across the pipeline view.
+  - **Telemetry Control Strip**: Real-time status indicator showing active daemon pulse, rule threshold (`Acquirability > 85`), total Hot count, latest audit timestamp/cycle, and manual "Audit Now" and Pause/Resume controls.
+  - **Hot Targets Filter**: One-click toggle in the filter bar to isolate only Hot leads exceeding the 85 threshold.
 - **Export Selection Engine**:
   - Export either the targeted selection or the full filtered set to **CSV** or **JSON**.
   - Dynamically formatted, timestamped filenames (e.g. `saasquatch_leads_selected_3_2026-10-15.csv`).
-- **Live Pipeline Metrics**: Real-time KPI summaries covering Total Tracked Leads, Qualified ARR Pipeline, Verified Direct Contacts, and Average EBITDA Margins.
+- **Live Pipeline Metrics (`PipelineStats`)**: Real-time KPI summaries covering Total Active Targets, **Average Monthly Growth Rate** (`+X.X%/mo` calculated from historical quarterly ARR series and annualized CMGR), Hot Targets (>85), Deliverability Rate, AI Enriched Dossiers, and Total Pipeline ARR with net monthly expansion rate.
 
 ### 2. Bulk Lead Import
 - **JSON File Ingestion**: Upload custom JSON lead files directly into application state.
@@ -48,6 +68,11 @@ The application combines a high-performance interactive pipeline UI with server-
   - Visual mapping table connecting SaaSQuatch data attributes (`companyName`, `domain`, `arr`, `ebitda`, `decisionMakerEmail`, etc.) to standard and custom Salesforce CRM fields (e.g., `Company`, `Website`, `AnnualRevenue`, `EBITDA__c`, `Decision_Maker_Email__c`).
   - Field transformation options: `Raw`, `Lowercase`, `Uppercase`, `Trim Whitespace`, `Number Format`, `Currency Format`.
   - Add, edit, remove, reset to defaults, and test payload serialization in real time.
+- **Visual Sync Status Badges**:
+  - Dedicated **Salesforce Sync** column in the `LeadTable` displaying instantaneous visual state for every lead row.
+  - **Synced Badge**: Emerald badge with a `CheckCircle2` icon displaying "Synced", detailed record ID, and sync timestamp.
+  - **Pending Badge**: Amber badge with a `Clock` icon displaying "Pending", enabling one-click lead dossier inspection and sync execution.
+  - Dynamically transitions in real-time immediately when a lead is synced via the dossier drawer.
 - **Real-Time Sync Animation**:
   - Interactive "Sync to Salesforce" button with a spinning sync indicator while the API handshake is in progress.
   - Transitions to an animated green checkmark with persistent synced timestamp and Salesforce record ID upon success.

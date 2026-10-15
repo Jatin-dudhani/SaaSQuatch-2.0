@@ -1,6 +1,7 @@
 import React from 'react';
 import { Lead } from '../types';
-import { Target, ShieldCheck, Sparkles, DollarSign, Building } from 'lucide-react';
+import { Target, ShieldCheck, Sparkles, DollarSign, Building, Flame, TrendingUp } from 'lucide-react';
+import { calculatePipelineMonthlyGrowth, formatCurrency } from '../utils/revenueUtils';
 
 interface PipelineStatsProps {
   leads: Lead[];
@@ -8,15 +9,22 @@ interface PipelineStatsProps {
 
 export const PipelineStats: React.FC<PipelineStatsProps> = ({ leads }) => {
   const totalLeads = leads.length;
-  const highPeFit = leads.filter((l) => l.peSignals.acquirabilityScore >= 90).length;
+  const hotCount = leads.filter((l) => l.isHot || (l.peSignals?.acquirabilityScore ?? 0) > 85).length;
+  const highPeFit = leads.filter((l) => (l.peSignals?.acquirabilityScore ?? 0) >= 90).length;
   const avgDeliverability =
     totalLeads > 0
       ? Math.round(leads.reduce((acc, curr) => acc + curr.deliverability.score, 0) / totalLeads)
       : 0;
   const enrichedCount = leads.filter((l) => !!l.aiEnrichment).length;
 
+  // Calculate Average Monthly Growth Rate and related pipeline metrics based on historical ARR series
+  const growthMetrics = React.useMemo(() => {
+    return calculatePipelineMonthlyGrowth(leads);
+  }, [leads]);
+
   return (
-    <div className="grid grid-cols-2 lg:grid-cols-5 gap-3 py-4">
+    <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3 py-4">
+      {/* 1. Active Targets */}
       <div className="bg-[#111622] border border-slate-800/80 rounded-lg p-3">
         <div className="flex items-center justify-between text-xs text-slate-400 mb-1">
           <span>Active Targets</span>
@@ -30,19 +38,38 @@ export const PipelineStats: React.FC<PipelineStatsProps> = ({ leads }) => {
         </div>
       </div>
 
-      <div className="bg-[#111622] border border-slate-800/80 rounded-lg p-3">
+      {/* 2. Average Monthly Growth Rate */}
+      <div className="bg-[#111622] border border-slate-800/80 rounded-lg p-3 group hover:border-emerald-500/40 transition-colors">
         <div className="flex items-center justify-between text-xs text-slate-400 mb-1">
-          <span>High Acquirability (90+)</span>
-          <Target className="w-3.5 h-3.5 text-amber-400" />
+          <span className="text-slate-300 font-medium">Avg Monthly Growth</span>
+          <TrendingUp className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
         </div>
-        <div className="text-xl font-bold font-mono text-amber-400 tabular-nums">
-          {highPeFit}
+        <div className="text-xl font-bold font-mono text-emerald-400 tabular-nums flex items-baseline gap-1">
+          <span>+{growthMetrics.avgMonthlyGrowthRate.toFixed(1)}%</span>
+          <span className="text-[11px] text-emerald-500/80 font-sans font-normal">/mo</span>
         </div>
-        <div className="text-[11px] text-slate-500 mt-0.5">
-          Owner retirement / succession
+        <div className="text-[11px] text-slate-500 mt-0.5 flex items-center justify-between">
+          <span>~{growthMetrics.annualizedGrowthRate}% Ann.</span>
+          <span className="text-emerald-400/80 font-mono text-[10px]">CMGR</span>
         </div>
       </div>
 
+      {/* 3. Hot Targets */}
+      <div className="bg-[#111622] border border-slate-800/80 rounded-lg p-3">
+        <div className="flex items-center justify-between text-xs text-slate-400 mb-1">
+          <span>Hot Targets (&gt;85)</span>
+          <Flame className="w-3.5 h-3.5 text-rose-400 fill-rose-500/40" />
+        </div>
+        <div className="text-xl font-bold font-mono text-rose-400 tabular-nums flex items-baseline gap-1.5">
+          <span>{hotCount}</span>
+          <span className="text-[11px] text-slate-400 font-sans font-normal">({highPeFit} &ge; 90)</span>
+        </div>
+        <div className="text-[11px] text-slate-500 mt-0.5">
+          Auto-flagged background engine
+        </div>
+      </div>
+
+      {/* 4. Deliverability Rate */}
       <div className="bg-[#111622] border border-slate-800/80 rounded-lg p-3">
         <div className="flex items-center justify-between text-xs text-slate-400 mb-1">
           <span>Deliverability Rate</span>
@@ -56,6 +83,7 @@ export const PipelineStats: React.FC<PipelineStatsProps> = ({ leads }) => {
         </div>
       </div>
 
+      {/* 5. AI Enriched Dossiers */}
       <div className="bg-[#111622] border border-slate-800/80 rounded-lg p-3">
         <div className="flex items-center justify-between text-xs text-slate-400 mb-1">
           <span>AI Enriched Dossiers</span>
@@ -69,18 +97,20 @@ export const PipelineStats: React.FC<PipelineStatsProps> = ({ leads }) => {
         </div>
       </div>
 
-      <div className="col-span-2 lg:col-span-1 bg-[#111622] border border-slate-800/80 rounded-lg p-3">
+      {/* 6. Target Revenue Pool */}
+      <div className="bg-[#111622] border border-slate-800/80 rounded-lg p-3">
         <div className="flex items-center justify-between text-xs text-slate-400 mb-1">
           <span>Target Revenue Pool</span>
           <DollarSign className="w-3.5 h-3.5 text-indigo-400" />
         </div>
         <div className="text-xl font-bold font-mono text-indigo-300 tabular-nums">
-          ~$78M ARR
+          {growthMetrics.totalPipelineArr > 0 ? formatCurrency(growthMetrics.totalPipelineArr) : '$0'} ARR
         </div>
         <div className="text-[11px] text-slate-500 mt-0.5">
-          Avg. EBITDA Margin: 33%
+          +~{formatCurrency(growthMetrics.netMonthlyArrAdded)}/mo net
         </div>
       </div>
     </div>
   );
 };
+

@@ -118,6 +118,11 @@ export const INITIAL_LEADS: Lead[] = [
     stage: 'deal_pipeline',
     scrapedAt: '2026-10-09',
     tags: ['Pricing Power', 'On-Prem to SaaS', 'Search Fund Target'],
+    salesforceSync: {
+      synced: true,
+      syncedAt: '2026-10-14 11:20 AM',
+      recordId: '00Q5g000001aX9qEAE',
+    },
   },
   {
     id: 'lead-03',
@@ -770,5 +775,10 @@ export const INITIAL_LEADS: Lead[] = [
     stage: 'deal_pipeline',
     scrapedAt: '2026-10-07',
     tags: ['Highest Moat', 'Gov Contract', '48% Margin'],
+    salesforceSync: {
+      synced: true,
+      syncedAt: '2026-10-13 04:15 PM',
+      recordId: '00Q5g000001bZ3wEAE',
+    },
   },
 ];

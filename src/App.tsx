@@ -10,7 +10,9 @@ import { ScraperConsoleModal } from './components/ScraperConsoleModal';
 import { EmailVerifierModal } from './components/EmailVerifierModal';
 import { CapraeDossierView } from './components/CapraeDossierView';
 import { BulkImportModal } from './components/BulkImportModal';
-import { CheckCircle2, X } from 'lucide-react';
+import { SelectionSummary } from './components/SelectionSummary';
+import { CheckCircle2, X, Flame, RefreshCw, Activity } from 'lucide-react';
+import { useHotLeadDaemon } from './utils/hotLeadProcessor';
 
 export default function App() {
   const [leads, setLeads] = useState<Lead[]>(INITIAL_LEADS);
@@ -22,6 +24,15 @@ export default function App() {
   const [isBulkImportOpen, setIsBulkImportOpen] = useState<boolean>(false);
   const [importNotice, setImportNotice] = useState<{ count: number; timestamp: string } | null>(null);
   const [selectedLeadIds, setSelectedLeadIds] = useState<Set<string>>(new Set());
+  const [isSidebarOpen, setIsSidebarOpen] = useState<boolean>(true);
+
+  // Autonomous background process: auto-marks leads as 'Hot' if acquirabilityScore > 85
+  const { daemonState, toggleDaemon, triggerManualAudit, clearNotice } = useHotLeadDaemon(
+    leads,
+    setLeads,
+    setSelectedLead,
+    4000
+  );
 
   const [filters, setFilters] = useState<FilterOptions>({
     searchQuery: '',
@@ -32,6 +43,7 @@ export default function App() {
     onlyBootstrapped: false,
     onlySuccessionRisk: false,
     onlyLegacyTech: false,
+    onlyHot: false,
   });
 
   // Extract unique industries for filter dropdown
@@ -96,6 +108,11 @@ export default function App() {
         return false;
       }
 
+      // Hot Leads (>85 Acquirability Score)
+      if (filters.onlyHot && !lead.isHot && (lead.peSignals?.acquirabilityScore ?? 0) <= 85) {
+        return false;
+      }
+
       return true;
     });
   }, [leads, filters]);
@@ -104,6 +121,11 @@ export default function App() {
   const selectedFilteredCount = useMemo(() => {
     return filteredLeads.filter((l) => selectedLeadIds.has(l.id)).length;
   }, [filteredLeads, selectedLeadIds]);
+
+  // All selected leads array
+  const selectedLeads = useMemo(() => {
+    return leads.filter((l) => selectedLeadIds.has(l.id));
+  }, [leads, selectedLeadIds]);
 
   // Enrich lead via server-side Gemini 3.8 Flash
   const handleEnrichLead = async (lead: Lead, e?: React.MouseEvent) => {
@@ -266,6 +288,18 @@ export default function App() {
     setSelectedLeadIds(new Set());
   };
 
+  const handleSelectTopFit = () => {
+    const topFitLeads = [...filteredLeads]
+      .sort((a, b) => (b.peSignals?.acquirabilityScore || 0) - (a.peSignals?.acquirabilityScore || 0))
+      .slice(0, 5);
+    setSelectedLeadIds((prev) => {
+      const next = new Set(prev);
+      topFitLeads.forEach((l) => next.add(l.id));
+      return next;
+    });
+    setIsSidebarOpen(true);
+  };
+
   // CSV Export (Selective or All)
   const handleExportCsv = (scope: 'selected' | 'all' = selectedLeadIds.size > 0 ? 'selected' : 'all') => {
     const leadsToExport =
@@ -400,41 +434,149 @@ export default function App() {
               totalFiltered={filteredLeads.length}
               totalCount={leads.length}
               selectedCount={selectedFilteredCount}
+              hotCount={daemonState.hotCount}
               onClearSelection={handleClearSelection}
               onExportCsv={handleExportCsv}
               onExportJson={handleExportJson}
               onOpenBulkImport={() => setIsBulkImportOpen(true)}
+              isSidebarOpen={isSidebarOpen}
+              onToggleSidebar={() => setIsSidebarOpen((prev) => !prev)}
             />
 
-            {/* Leads Table */}
-            <LeadTable
-              leads={filteredLeads}
-              selectedLeadIds={selectedLeadIds}
-              onToggleSelectLead={handleToggleSelectLead}
-              onToggleSelectAll={handleToggleSelectAll}
-              onClearSelection={handleClearSelection}
-              onExportSelectionCsv={() => handleExportCsv('selected')}
-              onExportSelectionJson={() => handleExportJson('selected')}
-              onSelectLead={(lead) => setSelectedLead(lead)}
-              onEnrichLead={(lead, e) => {
-                setSelectedLead(lead);
-                handleEnrichLead(lead, e);
-              }}
-              onVerifyLead={handleVerifyLead}
-              onUpdateStage={handleUpdateStage}
-              onResetFilters={() =>
-                setFilters({
-                  searchQuery: '',
-                  industry: 'all',
-                  stage: 'all',
-                  deliverability: 'all',
-                  minPeScore: 0,
-                  onlyBootstrapped: false,
-                  onlySuccessionRisk: false,
-                  onlyLegacyTech: false,
-                })
-              }
-            />
+            {/* Background Lead Scoring Engine Telemetry Strip */}
+            <div className="bg-[#0e131f] border border-slate-800/90 rounded-lg px-3.5 py-2 flex flex-wrap items-center justify-between gap-3 text-xs shadow-xs">
+              <div className="flex items-center gap-3">
+                <div className="flex items-center gap-2">
+                  <span className="relative flex h-2 w-2">
+                    {daemonState.isActive && (
+                      <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-rose-400 opacity-75" />
+                    )}
+                    <span
+                      className={`relative inline-flex rounded-full h-2 w-2 ${
+                        daemonState.isActive ? 'bg-rose-500' : 'bg-slate-500'
+                      }`}
+                    />
+                  </span>
+                  <div className="flex items-center gap-1.5 font-semibold text-slate-200">
+                    <Flame className="w-3.5 h-3.5 text-rose-400 fill-rose-500/40" />
+                    <span>Background Lead Prioritization Engine:</span>
+                    <span className={daemonState.isActive ? 'text-emerald-400 font-mono text-[10px]' : 'text-slate-400 font-mono text-[10px]'}>
+                      {daemonState.isActive ? 'RUNNING' : 'PAUSED'}
+                    </span>
+                  </div>
+                </div>
+
+                <div className="hidden sm:block h-3.5 w-px bg-slate-800" />
+
+                <div className="text-[11px] text-slate-400 flex items-center gap-1.5 flex-wrap">
+                  <span>Rule:</span>
+                  <span className="font-mono text-rose-300 font-bold bg-rose-950/60 px-1.5 py-0.2 rounded border border-rose-500/30 text-[10px]">
+                    Acquirability Score &gt; 85 &rarr; 'Hot'
+                  </span>
+                  <span className="text-slate-500 hidden md:inline">·</span>
+                  <span className="hidden md:inline">
+                    <strong className="text-rose-300 font-mono">{daemonState.hotCount}</strong> Hot leads flagged
+                  </span>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-2.5">
+                {daemonState.lastAuditedAt && (
+                  <span className="text-[10px] text-slate-500 font-mono hidden lg:inline">
+                    Audited {daemonState.lastAuditedAt} (Cycle #{daemonState.cycleCount})
+                  </span>
+                )}
+                <button
+                  onClick={triggerManualAudit}
+                  title="Run immediate background audit cycle"
+                  className="px-2 py-1 text-[11px] font-medium text-slate-300 hover:text-white bg-slate-800 hover:bg-slate-700 border border-slate-700/80 rounded transition-colors flex items-center gap-1 cursor-pointer active:scale-95"
+                >
+                  <RefreshCw className="w-3 h-3 text-slate-400" />
+                  <span>Audit Now</span>
+                </button>
+                <button
+                  onClick={toggleDaemon}
+                  title={daemonState.isActive ? 'Pause background lead scoring daemon' : 'Resume background lead scoring daemon'}
+                  className={`px-2 py-1 text-[11px] font-medium rounded transition-colors cursor-pointer border ${
+                    daemonState.isActive
+                      ? 'text-slate-400 hover:text-slate-200 bg-slate-850 border-slate-700'
+                      : 'text-emerald-300 bg-emerald-950/60 border-emerald-700 hover:bg-emerald-900/60'
+                  }`}
+                >
+                  {daemonState.isActive ? 'Pause' : 'Resume'}
+                </button>
+              </div>
+            </div>
+
+            {daemonState.recentNotice && (
+              <div className="bg-gradient-to-r from-rose-950/80 via-slate-900 to-rose-950/80 border border-rose-500/40 rounded-lg p-3 flex items-center justify-between text-xs text-rose-200">
+                <div className="flex items-center gap-2">
+                  <Flame className="w-4 h-4 text-rose-400 fill-rose-500/50" />
+                  <span>{daemonState.recentNotice}</span>
+                </div>
+                <button
+                  onClick={clearNotice}
+                  className="p-1 text-rose-400 hover:text-white rounded hover:bg-rose-900/40 cursor-pointer"
+                >
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              </div>
+            )}
+
+            {/* Table & Selection Summary Sidebar Workspace */}
+            <div className="flex flex-col xl:flex-row items-start gap-6">
+              <div className={`w-full min-w-0 transition-all duration-200 ${isSidebarOpen ? 'xl:flex-1' : ''}`}>
+                <LeadTable
+                  leads={filteredLeads}
+                  selectedLeadIds={selectedLeadIds}
+                  onToggleSelectLead={handleToggleSelectLead}
+                  onToggleSelectAll={handleToggleSelectAll}
+                  onClearSelection={handleClearSelection}
+                  onExportSelectionCsv={() => handleExportCsv('selected')}
+                  onExportSelectionJson={() => handleExportJson('selected')}
+                  onSelectLead={(lead) => setSelectedLead(lead)}
+                  onEnrichLead={(lead, e) => {
+                    setSelectedLead(lead);
+                    handleEnrichLead(lead, e);
+                  }}
+                  onVerifyLead={handleVerifyLead}
+                  onUpdateStage={handleUpdateStage}
+                  onResetFilters={() =>
+                    setFilters({
+                      searchQuery: '',
+                      industry: 'all',
+                      stage: 'all',
+                      deliverability: 'all',
+                      minPeScore: 0,
+                      onlyBootstrapped: false,
+                      onlySuccessionRisk: false,
+                      onlyLegacyTech: false,
+                      onlyHot: false,
+                    })
+                  }
+                  isSidebarOpen={isSidebarOpen}
+                  onToggleSidebar={() => setIsSidebarOpen((prev) => !prev)}
+                />
+              </div>
+
+              {isSidebarOpen && (
+                <aside className="w-full xl:w-80 2xl:w-92 shrink-0 transition-all duration-200">
+                  <SelectionSummary
+                    selectedLeads={selectedLeads}
+                    allLeads={leads}
+                    totalPipelineLeadsCount={leads.length}
+                    onToggleSelectLead={handleToggleSelectLead}
+                    onClearSelection={handleClearSelection}
+                    onSelectAllFiltered={handleToggleSelectAll}
+                    onSelectTopFit={handleSelectTopFit}
+                    onOpenLead={(lead) => setSelectedLead(lead)}
+                    onExportCsv={() => handleExportCsv('selected')}
+                    onExportJson={() => handleExportJson('selected')}
+                    onClose={() => setIsSidebarOpen(false)}
+                  />
+                </aside>
+              )}
+            </div>
           </div>
         )}
 

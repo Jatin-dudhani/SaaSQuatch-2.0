@@ -14,7 +14,12 @@ import {
   Cloud,
   CheckCircle2,
   Download,
+  PieChart,
+  Clock,
+  Flame,
 } from 'lucide-react';
+import { ArrSparkline } from './ArrSparkline';
+import { getLeadArrHistory, getYoYGrowth } from '../utils/revenueUtils';
 
 interface LeadTableProps {
   leads: Lead[];
@@ -29,6 +34,8 @@ interface LeadTableProps {
   onExportSelectionCsv?: () => void;
   onExportSelectionJson?: () => void;
   onClearSelection?: () => void;
+  isSidebarOpen?: boolean;
+  onToggleSidebar?: () => void;
 }
 
 export const LeadTable: React.FC<LeadTableProps> = ({
@@ -44,6 +51,8 @@ export const LeadTable: React.FC<LeadTableProps> = ({
   onExportSelectionCsv,
   onExportSelectionJson,
   onClearSelection,
+  isSidebarOpen,
+  onToggleSidebar,
 }) => {
   const [copiedEmail, setCopiedEmail] = React.useState<string | null>(null);
   const selectAllRef = React.useRef<HTMLInputElement | null>(null);
@@ -143,6 +152,20 @@ export const LeadTable: React.FC<LeadTableProps> = ({
                 <span>Export JSON ({selectedCountInView})</span>
               </button>
             )}
+            {onToggleSidebar && (
+              <button
+                onClick={onToggleSidebar}
+                title={isSidebarOpen ? 'Sidebar is currently open' : 'Open Selection Summary Sidebar'}
+                className={`px-3 py-1.5 text-xs font-semibold rounded-md transition-colors flex items-center gap-1.5 cursor-pointer active:scale-95 ${
+                  isSidebarOpen
+                    ? 'bg-blue-600/90 text-white border border-blue-400/40 shadow-xs'
+                    : 'bg-slate-800 text-slate-300 hover:bg-slate-700 hover:text-white border border-slate-700'
+                }`}
+              >
+                <PieChart className="w-3.5 h-3.5" />
+                <span>{isSidebarOpen ? 'Summary Sidebar' : 'Show Summary'}</span>
+              </button>
+            )}
           </div>
         </div>
       )}
@@ -164,11 +187,12 @@ export const LeadTable: React.FC<LeadTableProps> = ({
               </th>
               <th className="py-3 px-4">Company & Target Domain</th>
               <th className="py-3 px-4">Industry / Location</th>
-              <th className="py-3 px-4 text-right">ARR / EBITDA</th>
+              <th className="py-3 px-4 text-right">Estimated ARR & Growth</th>
               <th className="py-3 px-4">Decision Maker</th>
               <th className="py-3 px-4">Deliverability</th>
               <th className="py-3 px-4 text-center">PE Acquirability</th>
               <th className="py-3 px-4">Deal Stage</th>
+              <th className="py-3 px-4 text-center">Salesforce Sync</th>
               <th className="py-3 px-4 text-right">Actions</th>
             </tr>
           </thead>
@@ -177,6 +201,7 @@ export const LeadTable: React.FC<LeadTableProps> = ({
               const isEnriched = !!lead.aiEnrichment;
               const peScore = lead.peSignals.acquirabilityScore;
               const isHighFit = peScore >= 90;
+              const isHot = lead.isHot || peScore > 85;
               const isSelected = selectedLeadIds.has(lead.id);
 
               return (
@@ -186,6 +211,8 @@ export const LeadTable: React.FC<LeadTableProps> = ({
                   className={`transition-colors cursor-pointer group ${
                     isSelected
                       ? 'bg-blue-950/30 hover:bg-blue-900/40 border-l-2 border-l-blue-500'
+                      : isHot
+                      ? 'hover:bg-slate-800/50 border-l-2 border-l-rose-500/70 bg-gradient-to-r from-rose-950/[0.12] via-transparent to-transparent'
                       : 'hover:bg-slate-800/40 border-l-2 border-l-transparent'
                   }`}
                 >
@@ -203,8 +230,17 @@ export const LeadTable: React.FC<LeadTableProps> = ({
 
                   {/* Company & Domain */}
                   <td className="py-3.5 px-4">
-                    <div className="font-semibold text-slate-100 group-hover:text-blue-400 transition-colors flex items-center gap-1.5">
+                    <div className="font-semibold text-slate-100 group-hover:text-blue-400 transition-colors flex items-center gap-2 flex-wrap">
                       <span>{lead.companyName}</span>
+                      {isHot && (
+                        <span
+                          className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold tracking-wide uppercase bg-gradient-to-r from-rose-500/25 via-amber-500/20 to-red-500/25 text-rose-300 border border-rose-500/60 shadow-[0_0_12px_rgba(244,63,94,0.35)] shrink-0 animate-pulse"
+                          title={`🔥 Hot Target: Acquirability score ${lead.peSignals.acquirabilityScore}/100 exceeds 85 threshold (auto-flagged by background processor)`}
+                        >
+                          <Flame className="w-3 h-3 text-rose-400 fill-rose-500/50 shrink-0" />
+                          <span>HOT</span>
+                        </span>
+                      )}
                       {isEnriched && (
                         <span title="AI Enriched" className="flex items-center text-blue-400">
                           <Sparkles className="w-3 h-3" />
@@ -228,14 +264,43 @@ export const LeadTable: React.FC<LeadTableProps> = ({
                     </div>
                   </td>
 
-                  {/* ARR / EBITDA */}
+                  {/* Estimated ARR & Historical Growth Sparkline */}
                   <td className="py-3.5 px-4 text-right">
-                    <div className="font-mono font-semibold text-slate-200 tabular-nums">
-                      {lead.estimatedRevenue}
-                    </div>
-                    <div className="font-mono text-[11px] text-emerald-400 tabular-nums mt-0.5">
-                      {lead.estimatedEbitda}
-                    </div>
+                    {(() => {
+                      const arrHistory = getLeadArrHistory(lead);
+                      const yoyGrowthRate = getYoYGrowth(lead, arrHistory);
+                      const isPositive = yoyGrowthRate >= 0;
+                      return (
+                        <div className="flex items-center justify-end gap-3">
+                          {/* Recharts Sparkline */}
+                          <div
+                            className="flex flex-col items-end shrink-0"
+                            title={`Historical ARR Growth Trajectory: ${arrHistory[0]?.formattedArr || '$0'} → ${arrHistory[arrHistory.length - 1]?.formattedArr || '$0'} (+${yoyGrowthRate}% YoY)`}
+                          >
+                            <ArrSparkline
+                              data={arrHistory}
+                              width={76}
+                              height={24}
+                              isPositive={isPositive}
+                            />
+                            <div className="flex items-center gap-0.5 text-[9px] font-mono text-emerald-400 font-semibold mt-0.5">
+                              <TrendingUp className="w-2.5 h-2.5 shrink-0" />
+                              <span>+{yoyGrowthRate}% YoY</span>
+                            </div>
+                          </div>
+
+                          {/* Numerical ARR & EBITDA Values */}
+                          <div className="text-right shrink-0 min-w-[70px]">
+                            <div className="font-mono font-semibold text-slate-100 tabular-nums text-xs">
+                              {lead.estimatedRevenue}
+                            </div>
+                            <div className="font-mono text-[11px] text-emerald-400 tabular-nums mt-0.5">
+                              {lead.estimatedEbitda}
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })()}
                   </td>
 
                   {/* Decision Maker */}
@@ -291,7 +356,9 @@ export const LeadTable: React.FC<LeadTableProps> = ({
                     <div className="inline-flex items-center gap-1">
                       <span
                         className={`font-mono font-bold tabular-nums text-sm ${
-                          isHighFit
+                          isHot
+                            ? 'text-rose-400 font-extrabold'
+                            : isHighFit
                             ? 'text-amber-400'
                             : peScore >= 80
                             ? 'text-blue-400'
@@ -302,12 +369,24 @@ export const LeadTable: React.FC<LeadTableProps> = ({
                       </span>
                       <span className="text-[10px] text-slate-500">/100</span>
                     </div>
-                    <div className="text-[10px] text-slate-400 mt-0.5">
-                      {lead.peSignals.ownerSuccessionRisk ? 'Succession' : 'Expansion'}
-                    </div>
+                    {isHot ? (
+                      <div className="flex justify-center mt-0.5">
+                        <span
+                          className="inline-flex items-center gap-1 px-1.5 py-0.2 rounded text-[10px] font-bold text-rose-300 bg-rose-950/70 border border-rose-500/40 shadow-xs"
+                          title="Score >85: Classified as Hot Acquisition Candidate"
+                        >
+                          <Flame className="w-2.5 h-2.5 text-rose-400 fill-rose-400" />
+                          <span>Hot ({peScore})</span>
+                        </span>
+                      </div>
+                    ) : (
+                      <div className="text-[10px] text-slate-400 mt-0.5">
+                        {lead.peSignals.ownerSuccessionRisk ? 'Succession' : 'Expansion'}
+                      </div>
+                    )}
                   </td>
 
-                  {/* Stage Dropdown & SF Status */}
+                  {/* Deal Stage */}
                   <td className="py-3.5 px-4" onClick={(e) => e.stopPropagation()}>
                     <select
                       value={lead.stage}
@@ -320,12 +399,26 @@ export const LeadTable: React.FC<LeadTableProps> = ({
                       <option value="deal_pipeline">Deal Pipeline</option>
                       <option value="archived">Archived</option>
                     </select>
+                  </td>
 
-                    {lead.salesforceSync?.synced && (
-                      <div className="text-[10px] text-emerald-400 font-mono mt-1 flex items-center gap-1" title={`Synced at ${lead.salesforceSync.syncedAt}`}>
-                        <CheckCircle2 className="w-3 h-3 text-emerald-400 shrink-0" />
-                        <span>SF: Synced</span>
-                      </div>
+                  {/* Salesforce Sync Status Badge */}
+                  <td className="py-3.5 px-4 text-center whitespace-nowrap">
+                    {lead.salesforceSync?.synced ? (
+                      <span
+                        className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-semibold bg-emerald-950/60 text-emerald-400 border border-emerald-500/30 shadow-xs cursor-pointer hover:border-emerald-500/60 transition-colors"
+                        title={`Salesforce: Synced${lead.salesforceSync.syncedAt ? ` on ${lead.salesforceSync.syncedAt}` : ''}${lead.salesforceSync.recordId ? ` (ID: ${lead.salesforceSync.recordId})` : ''} · Click row to view CRM details`}
+                      >
+                        <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+                        <span>Synced</span>
+                      </span>
+                    ) : (
+                      <span
+                        className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-medium bg-amber-950/40 text-amber-300 border border-amber-500/30 shadow-xs cursor-pointer hover:border-amber-500/60 transition-colors"
+                        title="Salesforce: Sync Pending · Click row to open dossier and sync"
+                      >
+                        <Clock className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+                        <span>Pending</span>
+                      </span>
                     )}
                   </td>
 

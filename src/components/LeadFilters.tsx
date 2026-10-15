@@ -1,6 +1,6 @@
 import React from 'react';
 import { FilterOptions } from '../types';
-import { Search, Filter, Download, RotateCcw, CheckSquare, Square, Upload } from 'lucide-react';
+import { Search, Filter, Download, RotateCcw, CheckSquare, Square, Upload, PieChart, Flame } from 'lucide-react';
 
 interface LeadFiltersProps {
   filters: FilterOptions;
@@ -9,10 +9,13 @@ interface LeadFiltersProps {
   totalFiltered: number;
   totalCount: number;
   selectedCount?: number;
+  hotCount?: number;
   onClearSelection?: () => void;
   onExportCsv: (scope?: 'selected' | 'all') => void;
   onExportJson: (scope?: 'selected' | 'all') => void;
   onOpenBulkImport?: () => void;
+  isSidebarOpen?: boolean;
+  onToggleSidebar?: () => void;
 }
 
 export const LeadFilters: React.FC<LeadFiltersProps> = ({
@@ -22,10 +25,13 @@ export const LeadFilters: React.FC<LeadFiltersProps> = ({
   totalFiltered,
   totalCount,
   selectedCount = 0,
+  hotCount,
   onClearSelection,
   onExportCsv,
   onExportJson,
   onOpenBulkImport,
+  isSidebarOpen,
+  onToggleSidebar,
 }) => {
   const handleReset = () => {
     setFilters({
@@ -37,6 +43,7 @@ export const LeadFilters: React.FC<LeadFiltersProps> = ({
       onlyBootstrapped: false,
       onlySuccessionRisk: false,
       onlyLegacyTech: false,
+      onlyHot: false,
     });
   };
 
@@ -48,7 +55,8 @@ export const LeadFilters: React.FC<LeadFiltersProps> = ({
     filters.minPeScore > 0 ||
     filters.onlyBootstrapped ||
     filters.onlySuccessionRisk ||
-    filters.onlyLegacyTech;
+    filters.onlyLegacyTech ||
+    !!filters.onlyHot;
 
   return (
     <div className="bg-[#111622] border border-slate-800 rounded-lg p-4 space-y-3">
@@ -161,6 +169,21 @@ export const LeadFilters: React.FC<LeadFiltersProps> = ({
               </button>
             </>
           )}
+
+          {onToggleSidebar && (
+            <button
+              onClick={onToggleSidebar}
+              title={isSidebarOpen ? 'Hide Selection Summary sidebar' : 'Show Selection Summary sidebar'}
+              className={`px-3 py-2 text-xs font-semibold rounded-md transition-colors flex items-center gap-1.5 whitespace-nowrap cursor-pointer shadow-xs ${
+                isSidebarOpen
+                  ? 'bg-blue-600 text-white hover:bg-blue-500'
+                  : 'bg-slate-800 text-slate-300 hover:bg-slate-700 hover:text-white border border-slate-700'
+              }`}
+            >
+              <PieChart className="w-3.5 h-3.5" />
+              <span>Summary Sidebar</span>
+            </button>
+          )}
         </div>
       </div>
 
@@ -218,7 +241,27 @@ export const LeadFilters: React.FC<LeadFiltersProps> = ({
           </button>
 
           <div className="flex items-center gap-2 pl-2 border-l border-slate-800">
-            <span className="text-slate-500">Min Acquirability:</span>
+            <button
+              onClick={() =>
+                setFilters((prev) => ({ ...prev, onlyHot: !prev.onlyHot }))
+              }
+              className={`flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[11px] font-semibold transition-all cursor-pointer ${
+                filters.onlyHot
+                  ? 'bg-rose-950/80 border border-rose-500/70 text-rose-300 shadow-[0_0_10px_rgba(244,63,94,0.3)] animate-pulse'
+                  : 'bg-slate-850 hover:bg-slate-800 text-slate-300 border border-slate-700/80 hover:text-white'
+              }`}
+              title="Show only Hot leads with acquirabilityScore > 85 (auto-tagged by background engine)"
+            >
+              <Flame className={`w-3.5 h-3.5 ${filters.onlyHot ? 'text-rose-400 fill-rose-400' : 'text-rose-400'}`} />
+              <span>Hot Targets (&gt;85)</span>
+              {hotCount !== undefined && (
+                <span className="font-mono text-[10px] px-1.5 py-0.2 rounded-full bg-rose-900/60 text-rose-200">
+                  {hotCount}
+                </span>
+              )}
+            </button>
+
+            <span className="text-slate-500 ml-1">Min:</span>
             <button
               onClick={() =>
                 setFilters((prev) => ({ ...prev, minPeScore: prev.minPeScore === 90 ? 0 : 90 }))
